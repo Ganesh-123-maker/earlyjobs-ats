@@ -9,5 +9,7 @@ services:
     envVars:
       - key: NODE_VERSION
         value: 24
-      # Optional: seed the demo database on first boot by running `npm run seed`
-      # once via the Render shell after deploy.
+      - key: DATABASE_URL
+        sync: false # set the Neon connection string in the Render dashboard
+      # On first boot the app creates the schema and auto-seeds demo data
+      # when the candidates table is empty (boot guard in server.js).
