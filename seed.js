@@ -2,7 +2,8 @@
 // candidates spread across all 6 stages, with stage history over ~60 days,
 // ratings, notes and an activity log so the dashboard looks alive.
 // Usage: npm run seed
-const db = require('./db');
+// Also imported by server.js for the boot guard (exports runSeed).
+const { query } = require('./db');
 
 // Deterministic PRNG so the seed data is reproducible.
 function mulberry32(a) {
@@ -86,17 +87,12 @@ function pathFor(p) {
   return PATHS[p.stage];
 }
 
-function main() {
-  // Idempotent: wipe everything first.
-  db.exec('DELETE FROM activity_log; DELETE FROM notes; DELETE FROM stage_history; DELETE FROM candidates;');
-  db.exec("DELETE FROM sqlite_sequence WHERE name IN ('candidates','stage_history','notes','activity_log');");
-
-  const insertCand = db.prepare(`INSERT INTO candidates
-    (name, email, phone, role, experience_years, skills, resume_url, stage, rating, source, created_at, updated_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`);
-  const insertHist = db.prepare(`INSERT INTO stage_history (candidate_id, from_stage, to_stage, changed_at) VALUES (?,?,?,?)`);
-  const insertNote = db.prepare(`INSERT INTO notes (candidate_id, text, created_at) VALUES (?,?,?)`);
-  const insertAct = db.prepare(`INSERT INTO activity_log (type, candidate_id, summary, created_at) VALUES (?,?,?,?)`);
+async function runSeed() {
+  // Idempotent: wipe everything first (children before parents — FKs are enforced).
+  await query('DELETE FROM activity_log');
+  await query('DELETE FROM notes');
+  await query('DELETE FROM stage_history');
+  await query('DELETE FROM candidates');
 
   for (const p of PEOPLE) {
     const path = pathFor(p);
@@ -111,37 +107,80 @@ function main() {
       }
     }
     const appliedAt = isoAgo(p.applied);
-    const r = insertCand.run(
-      p.name, p.email, p.phone, p.role, p.exp, p.skills,
-      'https://example.com/resumes/' + p.email.split('@')[0] + '.pdf',
-      p.stage, p.rating, p.source, appliedAt, isoAgo(stops[stops.length - 1].daysAgo)
+    const { rows } = await query(
+      `INSERT INTO candidates
+      (name, email, phone, role, experience_years, skills, resume_url, stage, rating, source, created_at, updated_at)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
+      [
+        p.name,
+        p.email,
+        p.phone,
+        p.role,
+        p.exp,
+        p.skills,
+        'https://example.com/resumes/' + p.email.split('@')[0] + '.pdf',
+        p.stage,
+        p.rating,
+        p.source,
+        appliedAt,
+        isoAgo(stops[stops.length - 1].daysAgo),
+      ]
     );
-    const cid = Number(r.lastInsertRowid);
+    const cid = rows[0].id;
 
     let prev = null;
     for (const s of stops) {
       const at = isoAgo(s.daysAgo);
-      insertHist.run(cid, prev, s.stage, at);
-      insertAct.run(prev === null ? 'created' : 'stage_changed', cid,
-        prev === null
-          ? `${p.name} applied for ${p.role}`
-          : `${p.name} moved from ${prev} to ${s.stage}`,
-        at);
+      await query(
+        'INSERT INTO stage_history (candidate_id, from_stage, to_stage, changed_at) VALUES ($1,$2,$3,$4)',
+        [cid, prev, s.stage, at]
+      );
+      await query(
+        'INSERT INTO activity_log (type, candidate_id, summary, created_at) VALUES ($1,$2,$3,$4)',
+        [
+          prev === null ? 'created' : 'stage_changed',
+          cid,
+          prev === null
+            ? `${p.name} applied for ${p.role}`
+            : `${p.name} moved from ${prev} to ${s.stage}`,
+          at,
+        ]
+      );
       prev = s.stage;
     }
 
     const notes = NOTES[p.name] || [];
-    notes.forEach((text, i) => {
+    for (let i = 0; i < notes.length; i++) {
       const at = isoAgo(Math.max(0.3, stops[stops.length - 1].daysAgo - (i + 1) * 0.7));
-      insertNote.run(cid, text, at);
-      insertAct.run('note_added', cid, `Note added for ${p.name}`, at);
-    });
+      await query('INSERT INTO notes (candidate_id, text, created_at) VALUES ($1,$2,$3)', [
+        cid,
+        notes[i],
+        at,
+      ]);
+      await query(
+        'INSERT INTO activity_log (type, candidate_id, summary, created_at) VALUES ($1,$2,$3,$4)',
+        ['note_added', cid, `Note added for ${p.name}`, at]
+      );
+    }
   }
 
-  const total = db.prepare('SELECT COUNT(*) AS c FROM candidates').get().c;
-  const stages = db.prepare('SELECT stage, COUNT(*) AS c FROM candidates GROUP BY stage ORDER BY stage').all();
+  const total = (await query('SELECT COUNT(*)::int AS c FROM candidates')).rows[0].c;
+  const stages = (await query('SELECT stage, COUNT(*)::int AS c FROM candidates GROUP BY stage ORDER BY stage'))
+    .rows;
   console.log(`Seeded ${total} candidates.`);
-  console.log('By stage:', stages.map((s) => `${s.stage}=${s.c}`).join(', '));
+  console.log(
+    'By stage:',
+    stages.map((s) => `${s.stage}=${s.c}`).join(', ')
+  );
 }
 
-main();
+module.exports = { runSeed };
+
+if (require.main === module) {
+  runSeed()
+    .then(() => process.exit(0))
+    .catch((err) => {
+      console.error(err);
+      process.exit(1);
+    });
+}
