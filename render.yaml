@@ -1,0 +1,13 @@
+# EarlyJobs Mini ATS — deployed on Render free tier
+services:
+  - type: web
+    name: mini-ats
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 24
+      # Optional: seed the demo database on first boot by running `npm run seed`
+      # once via the Render shell after deploy.
