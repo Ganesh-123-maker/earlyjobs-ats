@@ -79,12 +79,3 @@ earlyjobs-ats/
 3. Settings: **Build command** `npm install`, **Start command** `npm start`, environment `NODE_VERSION=24`.
 4. Deploy. Then open the Render **Shell** for the service and run `npm run seed` once to load the demo data.
 5. Note: on the free tier the SQLite file lives on the instance's ephemeral disk — it resets on redeploy/restart. That's fine for the demo; for persistence attach a Render Disk mounted at e.g. `/data` and set `ATS_DB_PATH=/data/ats.db`.
-
-## 60-second demo-video script
-
-1. **(0:00–0:08)** Open the deployed URL. "This is Mini ATS — candidates, pipeline, and hiring metrics in one app."
-2. **(0:08–0:20)** Dashboard: point at stat cards, funnel bars, conversion %, activity feed.
-3. **(0:20–0:32)** Candidates tab: type a search, toggle a stage chip, open the Add modal, create a candidate → toast confirms.
-4. **(0:32–0:45)** Pipeline tab: drag a card from Screening to Interview — stage badge and counts update.
-5. **(0:45–0:55)** Click a card: detail drawer — change stage via dropdown, add a note, scroll the stage-history timeline.
-6. **(0:55–1:00)** Back to dashboard: "Metrics and activity updated live. Built with Node, Express, SQLite, and vanilla JS + Tailwind — deployed on Render."
