@@ -9,7 +9,7 @@ Track candidates through a hiring pipeline — add profiles, search and filter, 
 | Layer | Choice |
 |---|---|
 | Backend | Node.js + Express (single service, no build step) |
-| Database | SQLite via Node's built-in `node:sqlite` (Node ≥ 22 — zero native dependencies) |
+| Database | Postgres (Neon free tier) via the `pg` driver — schema created at startup |
 | Frontend | Single-page app in `public/` — vanilla JS + Tailwind CSS via CDN (no build pipeline) |
 | Serving | One Express server serves the REST API under `/api/*` and the static frontend at `/` |
 
@@ -26,11 +26,12 @@ Track candidates through a hiring pipeline — add profiles, search and filter, 
 
 ```bash
 npm install
-npm run seed     # idempotent: clears and reseeds 24 demo candidates
-npm start        # serves at http://localhost:3000
+cp .env.example .env   # then set DATABASE_URL to your Postgres (Neon) connection string
+npm run seed           # idempotent: clears and reseeds 24 demo candidates
+npm run dev            # serves at http://localhost:3000 (loads .env via --env-file)
 ```
 
-`npm run dev` runs with `node --watch` for development. The server reads `PORT` from the environment (Render-ready) and the DB path from `ATS_DB_PATH` (defaults to `./ats.db`).
+`npm start` runs without `--env-file` for production (Render provides env vars from the dashboard). The server reads `PORT` and `DATABASE_URL` from the environment. On first boot it creates the schema if needed, and a boot guard seeds the 24 demo candidates automatically when the candidates table is empty.
 
 ## API reference
 
@@ -62,7 +63,7 @@ All responses are JSON. Errors return `{ "error": "message" }` with the status c
 ```
 earlyjobs-ats/
 ├── server.js        # Express app: all /api/* routes + static frontend
-├── db.js            # SQLite open + schema (node:sqlite, no native deps)
+├── db.js            # pg Pool + Postgres schema (SSL for Neon)
 ├── seed.js          # Idempotent seed: 24 candidates, history, notes, activity
 ├── public/
 │   ├── index.html   # SPA markup (Tailwind CDN)
@@ -74,8 +75,9 @@ earlyjobs-ats/
 
 ## Deploy on Render (free tier)
 
-1. Push this repo to GitHub.
-2. Render dashboard → **New → Web Service** → connect the repo (or use `render.yaml` via Blueprint).
-3. Settings: **Build command** `npm install`, **Start command** `npm start`, environment `NODE_VERSION=24`.
-4. Deploy. Then open the Render **Shell** for the service and run `npm run seed` once to load the demo data.
-5. Note: on the free tier the SQLite file lives on the instance's ephemeral disk — it resets on redeploy/restart. That's fine for the demo; for persistence attach a Render Disk mounted at e.g. `/data` and set `ATS_DB_PATH=/data/ats.db`.
+1. Create a free Postgres database at [Neon](https://neon.tech) and copy its connection string.
+2. Push this repo to GitHub.
+3. Render dashboard → **New → Web Service** → connect the repo (or use `render.yaml` via Blueprint).
+4. Settings: **Build command** `npm install`, **Start command** `npm start`, environment `NODE_VERSION=24`.
+5. In the service's **Environment** tab, add `DATABASE_URL` with the Neon connection string (render.yaml declares it with `sync: false`, so Render prompts for the value).
+6. Deploy. On first boot the app creates the schema and the boot guard seeds the 24 demo candidates automatically — no manual steps needed. Data lives in Neon, so it survives redeploys and restarts.
