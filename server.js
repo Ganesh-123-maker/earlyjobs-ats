@@ -450,21 +450,39 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 3000;
 
-async function start() {
-  await initSchema();
-  const { rows } = await query('SELECT COUNT(*)::int AS c FROM candidates');
-  if (rows[0].c === 0) {
-    await runSeed();
-    console.log('Boot guard: candidates table was empty — seeded demo data.');
-  } else {
-    console.log('Boot guard: candidates table has data — skipping seed.');
+// Idempotent boot: schema + seed-on-empty. Memoized so serverless cold starts
+// share one in-flight attempt; reset on failure so a later request can retry.
+let ready = null;
+async function ensureReady() {
+  if (!ready) {
+    ready = (async () => {
+      await initSchema();
+      const { rows } = await query('SELECT COUNT(*)::int AS c FROM candidates');
+      if (rows[0].c === 0) {
+        await runSeed();
+        console.log('Boot guard: candidates table was empty — seeded demo data.');
+      } else {
+        console.log('Boot guard: candidates table has data — skipping seed.');
+      }
+    })().catch((err) => {
+      ready = null;
+      throw err;
+    });
   }
-  app.listen(PORT, () => {
-    console.log(`Mini ATS running at http://localhost:${PORT}`);
-  });
+  return ready;
 }
 
-start().catch((err) => {
-  console.error('Failed to start:', err.message || err);
-  process.exit(1);
-});
+if (require.main === module) {
+  ensureReady()
+    .then(() => {
+      app.listen(PORT, () => {
+        console.log(`Mini ATS running at http://localhost:${PORT}`);
+      });
+    })
+    .catch((err) => {
+      console.error('Failed to start:', err.message || err);
+      process.exit(1);
+    });
+}
+
+module.exports = { app, ensureReady };
