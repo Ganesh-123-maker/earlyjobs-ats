@@ -2,7 +2,8 @@
 // ensureReady() runs the idempotent boot (schema + seed-on-empty) on cold start.
 const fs = require('fs');
 const path = require('path');
-const { app, ensureReady } = require('../server');
+const app = require('../server');
+const ensureReady = app.ensureReady;
 
 const INDEX_HTML = path.join(__dirname, '..', 'public', 'index.html');
 

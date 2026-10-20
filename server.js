@@ -17,6 +17,14 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const app = express();
 app.use(express.json({ limit: '256kb' }));
 
+// Boot gate: hold every request until the idempotent boot (schema +
+// seed-on-empty) has run. No-op after the first successful boot, and it
+// makes the app self-sufficient when a runtime loads server.js directly
+// as the entry instead of api/index.js.
+app.use((req, res, next) => {
+  ensureReady().then(() => next(), next);
+});
+
 const nowISO = () => new Date().toISOString();
 
 // Wrap async route handlers so rejected promises reach the error middleware
@@ -485,4 +493,8 @@ if (require.main === module) {
     });
 }
 
-module.exports = { app, ensureReady };
+// Default export is the Express app itself (a function), which is what
+// serverless/hosted runtimes expect when they load server.js as the entry.
+// ensureReady rides along on the app so api/index.js can share it.
+app.ensureReady = ensureReady;
+module.exports = app;
