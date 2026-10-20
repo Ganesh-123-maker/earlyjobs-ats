@@ -31,7 +31,7 @@ npm run seed           # idempotent: clears and reseeds 24 demo candidates
 npm run dev            # serves at http://localhost:3000 (loads .env via --env-file)
 ```
 
-`npm start` runs without `--env-file` for production (Render provides env vars from the dashboard). The server reads `PORT` and `DATABASE_URL` from the environment. On first boot it creates the schema if needed, and a boot guard seeds the 24 demo candidates automatically when the candidates table is empty.
+`npm start` runs without `--env-file` for production (Vercel provides env vars from the dashboard). The server reads `PORT` and `DATABASE_URL` from the environment. On first boot it creates the schema if needed, and a boot guard seeds the 24 demo candidates automatically when the candidates table is empty.
 
 ## API reference
 
@@ -69,15 +69,16 @@ earlyjobs-ats/
 │   ├── index.html   # SPA markup (Tailwind CDN)
 │   └── app.js       # SPA logic: dashboard, candidates, kanban, drawer
 ├── package.json     # scripts: start, seed, dev
-├── render.yaml      # Render free-tier web service definition
+├── vercel.json      # Vercel routing: rewrites / to the serverless entry
+├── api/
+│   └── index.js     # Vercel serverless entry (serves the Express app)
+├── render.yaml      # Render free-tier web service definition (unused by the live deploy)
 └── README.md
 ```
 
-## Deploy on Render (free tier)
+## Deploy on Vercel
 
-1. Create a free Postgres database at [Neon](https://neon.tech) and copy its connection string.
-2. Push this repo to GitHub.
-3. Render dashboard → **New → Web Service** → connect the repo (or use `render.yaml` via Blueprint).
-4. Settings: **Build command** `npm install`, **Start command** `npm start`, environment `NODE_VERSION=24`.
-5. In the service's **Environment** tab, add `DATABASE_URL` with the Neon connection string (render.yaml declares it with `sync: false`, so Render prompts for the value).
-6. Deploy. On first boot the app creates the schema and the boot guard seeds the 24 demo candidates automatically — no manual steps needed. Data lives in Neon, so it survives redeploys and restarts.
+1. Push this repo to GitHub.
+2. Vercel dashboard → New Project → import the repo. Build command: `npm install`; the serverless entry is `api/index.js` (see vercel.json rewrites).
+3. Project → Environment Variables: add `DATABASE_URL` with the Neon Postgres connection string.
+4. Deploy. On cold start the app runs the idempotent boot — creates the schema if needed and seeds the 24 demo candidates when the table is empty. Data lives in Neon, so it survives redeploys and restarts.
